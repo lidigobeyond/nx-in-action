@@ -1,0 +1,93 @@
+steps:
+  # Step 1: Git history 가져오기
+  - name: 'gcr.io/cloud-builders/git'
+    id: 'fetch-git-history'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        git fetch --unshallow || true
+        git fetch origin main:main || true
+
+  # Step 2: Node.js 의존성 설치
+  - name: 'node:20'
+    id: 'install-dependencies'
+    entrypoint: 'npm'
+    args: ['ci']
+
+  # Step 3: 마지막 배포 커밋 해시 조회
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'get-last-deployed-sha'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        LAST_DEPLOYED_SHA=$$(gcloud artifacts docker images list \
+          asia-northeast3-docker.pkg.dev/newwwbi-playground/nx-apps/app3 \
+          --include-tags \
+          --format='get(tags)' \
+          --sort-by=~CREATE_TIME \
+          --limit=1 2>/dev/null | tr ',' '\n' | tr -d ' ' | grep -v '^latest$$' | head -1 || echo "")
+
+        if [ -z "$$LAST_DEPLOYED_SHA" ]; then
+          echo "No previous deployment found."
+          echo "" > /workspace/last_deployed_sha
+        else
+          echo "Last deployed commit: $$LAST_DEPLOYED_SHA"
+          echo "$$LAST_DEPLOYED_SHA" > /workspace/last_deployed_sha
+        fi
+
+  # Step 4: nx affected 확인
+  - name: 'node:20'
+    id: 'check-affected'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        LAST_DEPLOYED_SHA=$$(cat /workspace/last_deployed_sha)
+
+        if [ -z "$$LAST_DEPLOYED_SHA" ]; then
+          echo "No previous deployment. Building app3..."
+          echo "true" > /workspace/should_build
+        else
+          echo "Checking affected projects between $$LAST_DEPLOYED_SHA and $COMMIT_SHA"
+
+          AFFECTED=$$(npx nx show projects --affected --base=$$LAST_DEPLOYED_SHA --head=$SHORT_SHA 2>/dev/null || echo "")
+
+          if echo "$$AFFECTED" | grep -q "app3"; then
+            echo "app3 is affected. Building..."
+            echo "true" > /workspace/should_build
+          else
+            echo "app3 is not affected. Skipping build."
+            echo "false" > /workspace/should_build
+          fi
+        fi
+
+  # Step 5: Docker 빌드
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'docker-build'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [ "$(cat /workspace/should_build)" = "true" ]; then
+          docker build -f apps/app3/Dockerfile -t asia-northeast3-docker.pkg.dev/newwwbi-playground/nx-apps/app3:$SHORT_SHA .
+        else
+          echo "Skipping Docker build for app3"
+        fi
+
+  # Step 6: Artifact Registry로 푸시
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'docker-push'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        if [ "$(cat /workspace/should_build)" = "true" ]; then
+          docker push asia-northeast3-docker.pkg.dev/newwwbi-playground/nx-apps/app3:$SHORT_SHA
+        else
+          echo "Skipping Docker push for app3"
+        fi
+
+options:
+  logging: CLOUD_LOGGING_ONLY
