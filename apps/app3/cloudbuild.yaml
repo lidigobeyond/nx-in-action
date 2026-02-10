@@ -63,31 +63,35 @@ steps:
           fi
         fi
 
-  # Step 5: Docker 빌드
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'docker-build'
+  # Step 5: 변경 없으면 빌드 취소
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'cancel-if-not-affected'
     entrypoint: 'bash'
     args:
       - '-c'
       - |
-        if [ "$(cat /workspace/should_build)" = "true" ]; then
-          docker build -f apps/app3/Dockerfile -t asia-northeast3-docker.pkg.dev/newwwbi-playground/nx-apps/app3:$SHORT_SHA .
-        else
-          echo "Skipping Docker build for app3"
+        if [ "$$(cat /workspace/should_build)" != "true" ]; then
+          echo "No affected projects. Cancelling build."
+          gcloud builds cancel $BUILD_ID
         fi
 
-  # Step 6: Artifact Registry로 푸시
+  # Step 6: Docker 빌드
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'docker-build'
+    args:
+      - 'build'
+      - '-f'
+      - 'apps/app3/Dockerfile'
+      - '-t'
+      - 'asia-northeast3-docker.pkg.dev/newwwbi-playground/nx-apps/app3:$SHORT_SHA'
+      - '.'
+
+  # Step 7: Artifact Registry로 푸시
   - name: 'gcr.io/cloud-builders/docker'
     id: 'docker-push'
-    entrypoint: 'bash'
     args:
-      - '-c'
-      - |
-        if [ "$(cat /workspace/should_build)" = "true" ]; then
-          docker push asia-northeast3-docker.pkg.dev/newwwbi-playground/nx-apps/app3:$SHORT_SHA
-        else
-          echo "Skipping Docker push for app3"
-        fi
+      - 'push'
+      - 'asia-northeast3-docker.pkg.dev/newwwbi-playground/nx-apps/app3:$SHORT_SHA'
 
 options:
   logging: CLOUD_LOGGING_ONLY
