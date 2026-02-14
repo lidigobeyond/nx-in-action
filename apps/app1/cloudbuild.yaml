@@ -9,7 +9,7 @@ steps:
       - |
         git config --global url."https://x-access-token:$$GITHUB_TOKEN@github.com/".insteadOf "https://github.com/"
         git fetch --unshallow || true
-        git fetch origin main:main || true
+        git fetch origin main:main
 
   # Step 2: Node.js 의존성 설치
   - name: 'node:20'
@@ -52,7 +52,7 @@ steps:
           echo "No previous deployment. Building app1..."
           echo "true" > /workspace/should_build
         else
-          echo "Checking affected projects between $$LAST_DEPLOYED_SHA and $COMMIT_SHA"
+          echo "Checking affected projects between $$LAST_DEPLOYED_SHA and $SHORT_SHA"
 
           AFFECTED=$$(npx nx show projects --affected --base=$$LAST_DEPLOYED_SHA --head=$SHORT_SHA 2>/dev/null || echo "")
 
