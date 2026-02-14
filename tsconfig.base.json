@@ -17,7 +17,8 @@
     "paths": {
       "@nx-nestjs-workspace/lib1": ["libs/lib1/src/index.ts"],
       "@nx-nestjs-workspace/lib2": ["libs/lib2/src/index.ts"],
-      "@nx-nestjs-workspace/lib3": ["libs/lib3/src/index.ts"]
+      "@nx-nestjs-workspace/lib3": ["libs/lib3/src/index.ts"],
+      "@nx-nestjs-workspace/lib4": ["libs/lib4/src/index.ts"]
     }
   },
   "exclude": ["node_modules", "tmp"]
